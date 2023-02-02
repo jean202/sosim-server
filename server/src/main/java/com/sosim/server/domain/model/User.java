@@ -2,6 +2,7 @@ package com.sosim.server.domain.model;
 
 import com.sosim.server.type.Role;
 import com.sosim.server.type.SocialType;
+import java.time.LocalDate;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.EnumType;
@@ -29,9 +30,13 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
     private Long id;
+
     private String nickname;
+
     private String email;
     private String password;
+
+    private LocalDate createTime;
 
     @Enumerated(EnumType.STRING)
     private Role role;

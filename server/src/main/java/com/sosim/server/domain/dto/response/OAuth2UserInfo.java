@@ -1,4 +1,4 @@
-package com.sosim.server.domain.dto;
+package com.sosim.server.domain.dto.response;
 
 public interface OAuth2UserInfo {
     String getProviderId();

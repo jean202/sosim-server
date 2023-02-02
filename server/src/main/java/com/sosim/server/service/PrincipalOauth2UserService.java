@@ -1,12 +1,14 @@
 package com.sosim.server.service;
 
 import com.sosim.server.config.auth.PrincipalDetails;
-import com.sosim.server.domain.dto.GoogleUserInfo;
-import com.sosim.server.domain.dto.KakaoUserInfo;
-import com.sosim.server.domain.dto.NaverUserInfo;
-import com.sosim.server.domain.dto.OAuth2UserInfo;
+import com.sosim.server.config.exception.CustomException;
+import com.sosim.server.domain.dto.response.GoogleUserInfo;
+import com.sosim.server.domain.dto.response.KakaoUserInfo;
+import com.sosim.server.domain.dto.response.NaverUserInfo;
+import com.sosim.server.domain.dto.response.OAuth2UserInfo;
 import com.sosim.server.domain.model.User;
 import com.sosim.server.repository.UserRepository;
+import com.sosim.server.type.ErrorCodeType;
 import com.sosim.server.type.Role;
 import com.sosim.server.type.SocialType;
 import java.util.Map;
@@ -40,7 +42,7 @@ public class PrincipalOauth2UserService extends DefaultOAuth2UserService {
         } else if(socialType.equals(SocialType.KAKAO)) {
             oAuth2UserInfo = new GoogleUserInfo(oAuth2User.getAttributes());
         } else {
-           // error 상태 코드 or 메시지
+            throw new CustomException(ErrorCodeType.PROVIDER_LIST);
         }
 
         String socialId = oAuth2UserInfo.getProviderId();
@@ -49,10 +51,15 @@ public class PrincipalOauth2UserService extends DefaultOAuth2UserService {
         String email = oAuth2UserInfo.getEmail();
         Role role = Role.USER;
 
-        User userEntity = userRepository.findByEmail(email);
 
-        if(userEntity == null) {
-            userEntity = User.builder()
+        if (userRepository.findByEmail(email).isPresent()) { // TODO Optional에 들어있는거 꺼내기
+            throw new CustomException(ErrorCodeType.USER_EMAIL_ALREADY_EXIST/*, userRepository.findByEmail(email).*/);
+        }
+
+        if (userRepository.findByNickname(nickname).isPresent()) {
+            throw new CustomException(ErrorCodeType.USER_NICKNAME_ALREADY_EXIST);
+        }
+            User userEntity = User.builder()
                 .nickname(nickname)
                 .password(password)
                 .email(email)
@@ -61,9 +68,7 @@ public class PrincipalOauth2UserService extends DefaultOAuth2UserService {
                 .socialId(socialId)
                 .build();
             userRepository.save(userEntity);
-        } else {
-            // 상태코드
-        }
+
         return new PrincipalDetails(userEntity, oAuth2User.getAttributes());
     }
 }
