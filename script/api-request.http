@@ -1,0 +1,8 @@
+### ver1 login redirect test
+### 이렇게는 테스트가 안됨, 돌아오는 결과값을 지정 안해줘서
+POST http://localhost:8080/login
+Content-Type: application/json
+
+{
+  "socialType": "kakao"
+}
