@@ -28,6 +28,7 @@ dependencies {
 	implementation 'org.thymeleaf.extras:thymeleaf-extras-springsecurity5'
 	implementation 'org.springdoc:springdoc-openapi-ui:1.6.9'
 	implementation 'org.hibernate.validator:hibernate-validator:6.2.0.Final'
+	implementation 'com.auth0:java-jwt:4.2.1'
 	implementation 'org.springframework.boot:spring-boot-configuration-processor'
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'com.h2database:h2'

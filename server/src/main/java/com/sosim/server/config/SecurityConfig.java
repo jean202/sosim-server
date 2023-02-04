@@ -59,5 +59,4 @@ public class SecurityConfig {
                 .addFilter(new JwtAuthorizationFilter(authenticationManager, userRepository));
         }
     }
-
 }

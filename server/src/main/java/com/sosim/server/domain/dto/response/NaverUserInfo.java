@@ -9,11 +9,18 @@ public class NaverUserInfo implements OAuth2UserInfo{
 
     // {id=, email=, name=}
     public NaverUserInfo(Map<String, Object> attributes) {
+        // spuer(attributes);
         this.attributes = attributes;
     }
 
     @Override
     public String getProviderId() {
+//        Map<String, Object> response = (Map<String, Object>) attributes.get("response");
+//
+//        if (response == null) {
+//            return null;
+//        }
+//        return (String) response.get("id");
         return (String) attributes.get("id");
     }
 
@@ -28,7 +35,13 @@ public class NaverUserInfo implements OAuth2UserInfo{
     }
 
     @Override
-    public String getName() {
+    public String getNickname() {
+//        Map<String, Object> response = (Map<String, Object>) attributes.get("response");
+//
+//        if (response == null) {
+//            return null;
+//        }
+//        return (String) response.get("nickname");
         return (String) attributes.get("name");
     }
 }
