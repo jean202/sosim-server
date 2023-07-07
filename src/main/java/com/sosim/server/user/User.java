@@ -1,12 +1,16 @@
 package com.sosim.server.user;
 
 import com.sosim.server.common.auditing.BaseTimeEntity;
+import com.sosim.server.event.Event;
 import com.sosim.server.oauth.dto.request.OAuth2UserInfoRequest;
+import com.sosim.server.participant.Participant;
 import com.sosim.server.type.SocialType;
 import com.sosim.server.type.StatusType;
 import com.sosim.server.type.UserType;
 import com.sosim.server.type.WithdrawalGroundsType;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.EnumType;
@@ -14,6 +18,7 @@ import javax.persistence.Enumerated;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.OneToMany;
 import javax.persistence.Table;
 import javax.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -26,7 +31,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @Entity
 @Builder
-@Table(name = "USER")
+@Table(name = "`USER`")
 @AllArgsConstructor
 public class User extends BaseTimeEntity {
 
@@ -65,6 +70,12 @@ public class User extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "WITHDRAWAL_GROUNDS_TYPE")
     private WithdrawalGroundsType withdrawalGroundsType;
+
+    @OneToMany(mappedBy = "user")
+    private List<Event> events = new ArrayList<>();
+
+    @OneToMany(mappedBy = "user")
+    private List<Participant> participants = new ArrayList<>();
 
     public static User create(OAuth2UserInfoRequest oAuth2UserInfoRequest) {
         User user = User.builder()

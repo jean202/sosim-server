@@ -39,6 +39,18 @@ public class Participant extends BaseTimeEntity {
     @Column(name = "NICKNAME")
     private String nickname;
 
+    // User 관련 연관관계 편의 메서드
+    public void setUser(User user) {
+        this.user = user;
+        user.getParticipants().add(this);
+    }
+
+    // Group 관련 연관관계 편의 메서드
+    public void setGroup(Group group) {
+        this.group = group;
+        group.getParticipants().add(this);
+    }
+
     @Builder (access = AccessLevel.PRIVATE)
     private Participant(User user, Group group, String nickname) {
         this.user = user;

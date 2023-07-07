@@ -97,6 +97,18 @@ public class Event extends BaseTimeEntity {
     @Column(name = "USER_NON_TO_CON")
     private Integer userNonToCon;
 
+    // Group 관련 연관관계 편의 메서드
+    public void setGroup(Group group) {
+        this.group = group;
+        group.getEvents().add(this);
+    }
+
+    // User 관련 연관관계 편의 메서드
+    public void setUser(User user) {
+        this.user = user;
+        user.getEvents().add(this);
+    }
+
     public void updateEvent(EventModifyReq eventModifyReq) {
 
         this.user = eventModifyReq.getUser();
