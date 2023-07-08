@@ -55,13 +55,13 @@ public class GroupService {
         } catch (CustomException e) {}
 
         return GetGroupResponse.create(groupEntity, groupEntity.getAdminId().equals(userId),
-                (int) groupEntity.getParticipantList().stream()
+                (int) groupEntity.getParticipants().stream()
                         .filter(p -> p.getStatusType().equals(StatusType.ACTIVE)).count(), isInto);
     }
 
     public GetParticipantListResponse getGroupParticipant(Long userId, Long groupId) {
         Group groupEntity = getGroupEntity(groupId);
-        List<String> nicknameList = groupEntity.getParticipantList().stream()
+        List<String> nicknameList = groupEntity.getParticipants().stream()
                 .filter(p -> p.getStatusType().equals(StatusType.ACTIVE) &&
                         !p.getNickname().equals(groupEntity.getAdminNickname()))
                 .map(Participant::getNickname)
@@ -104,7 +104,7 @@ public class GroupService {
             throw new CustomException(CodeType.NONE_ADMIN);
         }
 
-        if (groupEntity.getParticipantList().stream()
+        if (groupEntity.getParticipants().stream()
                 .filter(p -> p.getStatusType().equals(StatusType.ACTIVE)).count() > 1) {
             throw new CustomException(CodeType.NONE_ZERO_PARTICIPANT);
         }
@@ -130,7 +130,7 @@ public class GroupService {
         Participant participantEntity = participantService
                 .getParticipantEntity(participantNicknameRequest.getNickname(), groupEntity);
 
-        if (!groupEntity.getParticipantList().contains(participantEntity)) {
+        if (!groupEntity.getParticipants().contains(participantEntity)) {
             throw new CustomException(CodeType.NONE_PARTICIPANT);
         }
 
@@ -140,7 +140,7 @@ public class GroupService {
     public void withdrawGroup(Long userId, Long groupId) {
         Group groupEntity = getGroupEntity(groupId);
         participantService.deleteParticipantEntity(userService.getUser(userId), groupEntity);
-        if (groupEntity.getParticipantList().stream().noneMatch(p -> p.getStatusType().equals(StatusType.ACTIVE))) {
+        if (groupEntity.getParticipants().stream().noneMatch(p -> p.getStatusType().equals(StatusType.ACTIVE))) {
             groupEntity.delete();
         }
     }
@@ -167,7 +167,7 @@ public class GroupService {
         for (Participant participant : participantEntityList) {
             Group group = participant.getGroup();
             groupList.add(GetGroupResponse.create(group, group.getAdminId().equals(userId),
-                    (int) group.getParticipantList().stream()
+                    (int) group.getParticipants().stream()
                             .filter(p -> p.getStatusType().equals(StatusType.ACTIVE)).count(),true));
         }
 
