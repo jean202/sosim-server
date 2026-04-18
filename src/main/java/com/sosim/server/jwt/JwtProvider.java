@@ -7,8 +7,8 @@ public interface JwtProvider {
 
     Optional<String> extractAccessToken(HttpServletRequest request);
     Optional<String> extractRefreshToken(HttpServletRequest request);
-    Optional<String> extractId(String AccessToken);
+    Optional<String> extractId(String accessToken);
+    Optional<String> extractIdFromRefreshToken(String refreshToken);
     boolean isTokenValid(String token);
-    String reIssueRefreshToken(String id);
-
+    RefreshToken reIssueRefreshToken(String userId, String deviceId);
 }

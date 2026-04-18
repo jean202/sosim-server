@@ -24,7 +24,7 @@ public class OAuth2Controller {
                                    HttpServletResponse response) throws JsonProcessingException {
         LoginResponse loginResponse = oAuth2Service.login(SocialType.getSocialType(socialType), code);
         CodeType successLogin = CodeType.SUCCESS_LOGIN;
-        jwtService.setRefreshTokenHeader(response, loginResponse.getRefreshToken());
+        jwtService.sendTokenCookies(response, loginResponse.getRefreshTokenObj());
 
         return new ResponseEntity<>(Response.create(successLogin, loginResponse), successLogin.getHttpStatus());
     }

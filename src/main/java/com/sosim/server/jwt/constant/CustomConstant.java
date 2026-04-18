@@ -13,5 +13,7 @@ public class CustomConstant {
     public static final String BEARER = "Bearer ";
     public static final String REFRESH_TOKEN_KEY = "refreshTokenKey";
     public static final String REFRESH_TOKEN = "refreshToken";
+    public static final String DEVICE_ID = "deviceId";
+    public static final String REDIS_REFRESH_PREFIX = "refresh:";
 
 }

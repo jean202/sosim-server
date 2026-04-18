@@ -23,6 +23,8 @@ public enum CodeType {
 
     // Jwt
     RE_ISSUE_TOKEN("2009", HttpStatus.OK, "AccessToken과 RefreshToken이 성공적으로 재발급 되었습니다."),
+    NOT_FOUND_REFRESH_TOKEN("2010", HttpStatus.UNAUTHORIZED, "리프레시 토큰 또는 디바이스 ID가 존재하지 않습니다."),
+    INVALID_REFRESH_TOKEN("2011", HttpStatus.UNAUTHORIZED, "유효하지 않은 리프레시 토큰입니다."),
 
     // User
     USER_INFO_SUCCESS("3001", HttpStatus.OK, "회원 정보가 성공적으로 조회되었습니다."),

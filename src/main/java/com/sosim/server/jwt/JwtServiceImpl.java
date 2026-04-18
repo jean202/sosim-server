@@ -1,8 +1,8 @@
 package com.sosim.server.jwt;
 
+import static com.sosim.server.jwt.constant.CustomConstant.DEVICE_ID;
 import static com.sosim.server.jwt.constant.CustomConstant.NONE;
 import static com.sosim.server.jwt.constant.CustomConstant.REFRESH_TOKEN;
-import static com.sosim.server.jwt.constant.CustomConstant.SET_COOKIE;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sosim.server.config.exception.CustomException;
@@ -14,11 +14,14 @@ import com.sosim.server.type.CodeType;
 import com.sosim.server.user.User;
 import com.sosim.server.user.UserRepository;
 import java.io.IOException;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.UUID;
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseCookie;
@@ -29,9 +32,9 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-@Getter
 @Slf4j
-public class JwtServiceImpl implements JwtService{
+public class JwtServiceImpl implements JwtService {
+
     private final UserRepository userRepository;
     private final JwtProperties jwtProperties;
     private final JwtFactory jwtFactory;
@@ -39,41 +42,71 @@ public class JwtServiceImpl implements JwtService{
     private final JwtDao jwtDao;
     private final ObjectMapper objectMapper;
 
-    /**
-     * refreshToken redis에 저장
-     */
     @Override
     public void saveRefreshToken(RefreshToken refreshToken) {
-        jwtDao.setValues(refreshToken.getRefreshToken(), refreshToken.getId());
+        Duration ttl = Duration.ofMillis(jwtProperties.getRefreshTokenExpirationPeriod());
+        jwtDao.saveRefreshToken(refreshToken.getId(), refreshToken.getDeviceId(),
+            refreshToken.getRefreshToken(), ttl);
     }
 
     /**
-     *  1. 헤더에서 추출한 RefreshToken으로 redis에서 유저 정보를 탐색
-     *  2. 유저가 있다면 AccessToken 생성, refreshToken 재발급 & redis에 refreshToken 업데이트
-     *  3. AccessToken 문자열과 Cookie에 담아 응답 헤더에 실은 RefreshToken값 반환
+     * 1. Cookie 헤더에서 refreshToken, deviceId 추출
+     * 2. refreshToken JWT에서 userId 파싱
+     * 3. Redis Hash에서 해당 userId+deviceId의 저장된 토큰 조회
+     * 4. 수신 토큰과 저장 토큰 일치 여부 + 서명 유효성 검증
+     * 5. 기존 디바이스 항목 삭제 → 새 토큰+deviceId 발급 → Redis 저장
+     * 6. 새 토큰들을 쿠키로 응답
      */
     @Override
-    public ReIssueTokenInfo verifyRefreshTokenAndReIssueAccessToken(HttpServletRequest httpServletRequest, HttpServletResponse response) {
+    public ReIssueTokenInfo verifyRefreshTokenAndReIssueAccessToken(HttpServletRequest request, HttpServletResponse response) {
+        String refreshToken = extractCookieValue(request, REFRESH_TOKEN);
+        String deviceId = extractCookieValue(request, DEVICE_ID);
 
-        String refreshToken = httpServletRequest.getHeader(SET_COOKIE);
-        String id = jwtDao.getValues(refreshToken);
-        log.info("refreshToken : {}, id: {}", refreshToken, id);
-        User user = userRepository.findById(Long.parseLong(id)).orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_USER));
-        if(Long.parseLong(id) != user.getId()) {
-            log.info("invalid user");
-            throw new CustomException(CodeType.INVALID_USER);
+        if (refreshToken == null || deviceId == null) {
+            throw new CustomException(CodeType.NOT_FOUND_REFRESH_TOKEN);
         }
-        jwtDao.deleteValues(refreshToken);
-        String reIssuedRefreshToken = jwtProvider.reIssueRefreshToken(id);
-        sendRefreshToken(response, reIssuedRefreshToken);
-        return ReIssueTokenInfo.builder().accessToken(jwtFactory.createAccessToken(id)).build();
+
+        String userId = jwtProvider.extractIdFromRefreshToken(refreshToken)
+            .orElseThrow(() -> new CustomException(CodeType.INVALID_REFRESH_TOKEN));
+
+        String storedToken = jwtDao.getRefreshToken(userId, deviceId);
+        if (storedToken == null || !storedToken.equals(refreshToken) || !jwtProvider.isTokenValid(refreshToken)) {
+            throw new CustomException(CodeType.INVALID_REFRESH_TOKEN);
+        }
+
+        userRepository.findById(Long.parseLong(userId))
+            .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_USER));
+
+        jwtDao.deleteRefreshToken(userId, deviceId);
+        RefreshToken reIssued = jwtProvider.reIssueRefreshToken(userId, deviceId);
+        sendTokenCookies(response, reIssued);
+
+        log.info("토큰 재발급 완료 - userId: {}, deviceId: {}", userId, reIssued.getDeviceId());
+        return ReIssueTokenInfo.builder().accessToken(jwtFactory.createAccessToken(userId)).build();
     }
 
     @Override
-    public void sendRefreshToken(HttpServletResponse response, String refreshToken) {
+    public void sendTokenCookies(HttpServletResponse response, RefreshToken refreshToken) {
+        long maxAgeSeconds = jwtProperties.getRefreshTokenExpirationPeriod() / 1000;
 
-        setRefreshTokenHeader(response, refreshToken);
-        log.info("Refresh Token 헤더 설정 완료");
+        ResponseCookie refreshCookie = ResponseCookie.from(REFRESH_TOKEN, refreshToken.getRefreshToken())
+            .maxAge(maxAgeSeconds)
+            .httpOnly(true)
+            .secure(true)
+            .sameSite(NONE)
+            .path("/")
+            .build();
+
+        ResponseCookie deviceCookie = ResponseCookie.from(DEVICE_ID, refreshToken.getDeviceId())
+            .maxAge(maxAgeSeconds)
+            .httpOnly(true)
+            .secure(true)
+            .sameSite(NONE)
+            .path("/")
+            .build();
+
+        response.addHeader("Set-Cookie", refreshCookie.toString());
+        response.addHeader("Set-Cookie", deviceCookie.toString());
     }
 
     @Override
@@ -91,24 +124,19 @@ public class JwtServiceImpl implements JwtService{
     }
 
     @Override
-    public void setRefreshTokenHeader(HttpServletResponse response, String refreshToken) {
-
-        ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN , refreshToken)
-            .maxAge(jwtProperties.getAccessTokenMaxAge())
-            .secure(true)
-            .sameSite(NONE)
-            .httpOnly(true)
-            .build();
-
-        response.setHeader(SET_COOKIE, cookie.toString());
-        log.info("식사는 없어 : cookie {}", cookie);
-        log.info("디저트 맛만 : response {}", response);
-    }
-
     public void saveAuthentication(User user) {
-
         AuthUser context = AuthUser.builder().id(String.valueOf(user.getId())).build();
         Authentication authentication = new UsernamePasswordAuthenticationToken(context, null, context.getAuthorities());
         SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    private String extractCookieValue(HttpServletRequest request, String name) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) return null;
+        return Arrays.stream(cookies)
+            .filter(c -> name.equals(c.getName()))
+            .map(Cookie::getValue)
+            .findFirst()
+            .orElse(null);
     }
 }

@@ -23,15 +23,15 @@ public class LoginResponse {
     private boolean permit;
 
     @JsonIgnore
-    private String refreshToken;
+    private RefreshToken refreshTokenObj;
 
-    public static LoginResponse create(User user, String accessToken, String refreshToken) {
+    public static LoginResponse create(User user, String accessToken, RefreshToken refreshToken) {
         return LoginResponse.builder()
                 .accessToken(accessToken)
                 .userId(user.getId())
                 .email(user.getEmail())
                 .permit(user.isPermit())
-                .refreshToken(refreshToken)
+                .refreshTokenObj(refreshToken)
                 .build();
     }
 }

@@ -16,7 +16,7 @@ import com.sosim.server.user.User;
 import com.sosim.server.user.UserRepository;
 import com.sosim.server.user.UserService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
+import java.util.UUID;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -52,12 +52,15 @@ public class OAuth2Service {
 
         User user = getUserProfile(socialType, oAuth2Token, type);
 
-        RefreshToken refreshToken = RefreshToken.builder().id(String.valueOf(user.getId()))
-                .refreshToken(jwtFactory.createRefreshToken()).build();
+        String userId = String.valueOf(user.getId());
+        RefreshToken refreshToken = RefreshToken.builder()
+                .id(userId)
+                .deviceId(UUID.randomUUID().toString())
+                .refreshToken(jwtFactory.createRefreshToken(userId))
+                .build();
         jwtService.saveRefreshToken(refreshToken);
 
-        return LoginResponse.create(user,
-                jwtFactory.createAccessToken(String.valueOf(user.getId())), refreshToken.getRefreshToken());
+        return LoginResponse.create(user, jwtFactory.createAccessToken(userId), refreshToken);
     }
 
     private OAuth2TokenRequest getToken(ClientRegistration type, String authorizationCode) throws JsonProcessingException {

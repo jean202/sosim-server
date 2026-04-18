@@ -38,6 +38,7 @@ public class SecurityConfig {
         http
                 .authorizeRequests()
                 .antMatchers("/login/**").permitAll()
+                .antMatchers("/auth/refresh").permitAll()
                 .antMatchers("/api/**").authenticated();
 
         // Jwt 인증 필터
