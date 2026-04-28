@@ -7,10 +7,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -20,38 +20,32 @@ public class SecurityConfig {
     private final JwtProvider jwtProvider;
 
     @Bean
+    public WebSecurityCustomizer configure() {
+        return (web) -> web.ignoring().antMatchers("/auth/**");
+    }
+
+    @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .csrf().disable() // csrf
+                .csrf().disable()
                 .httpBasic().disable()
                 .formLogin().disable()
                 .headers().frameOptions().disable();
 
-        http
-                .cors();
+        http.cors();
 
-        // 세션 STATELESS 설정
-        http
-                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+        http.sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
 
-        // 요청에 대한 권한 체크 파트
-        http
-                .authorizeRequests()
-                .antMatchers("/login/**").permitAll()
-                .antMatchers("/auth/refresh").permitAll()
+        http.authorizeRequests()
                 .antMatchers("/api/**").authenticated();
 
-        // Jwt 인증 필터
-        http
-                .addFilterBefore(authenticationFilter(), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(authenticationFilter(), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     @Bean
     public AuthenticationFilter authenticationFilter() {
-        AuthenticationFilter authenticationFilter = new AuthenticationFilter(jwtProvider, jwtService);
-        return authenticationFilter;
+        return new AuthenticationFilter(jwtProvider, jwtService);
     }
-
 }

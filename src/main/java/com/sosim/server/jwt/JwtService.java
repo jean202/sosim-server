@@ -16,4 +16,5 @@ public interface JwtService {
     void checkAccessTokenAndAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
         throws ServletException, IOException;
     void saveAuthentication(User user);
+    void deleteRefreshToken(HttpServletRequest httpServletRequest);
 }

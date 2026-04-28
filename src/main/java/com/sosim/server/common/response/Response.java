@@ -22,7 +22,7 @@ public class Response<T> {
     @Getter
     @AllArgsConstructor
     private static class Status {
-        private String code;
+        private int code;
         private String message;
     }
 

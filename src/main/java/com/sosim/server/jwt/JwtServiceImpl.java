@@ -16,7 +16,6 @@ import com.sosim.server.user.UserRepository;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.UUID;
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
@@ -49,14 +48,6 @@ public class JwtServiceImpl implements JwtService {
             refreshToken.getRefreshToken(), ttl);
     }
 
-    /**
-     * 1. Cookie 헤더에서 refreshToken, deviceId 추출
-     * 2. refreshToken JWT에서 userId 파싱
-     * 3. Redis Hash에서 해당 userId+deviceId의 저장된 토큰 조회
-     * 4. 수신 토큰과 저장 토큰 일치 여부 + 서명 유효성 검증
-     * 5. 기존 디바이스 항목 삭제 → 새 토큰+deviceId 발급 → Redis 저장
-     * 6. 새 토큰들을 쿠키로 응답
-     */
     @Override
     public ReIssueTokenInfo verifyRefreshTokenAndReIssueAccessToken(HttpServletRequest request, HttpServletResponse response) {
         String refreshToken = extractCookieValue(request, REFRESH_TOKEN);
@@ -112,7 +103,6 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public void checkAccessTokenAndAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
         throws ServletException, IOException {
-
         log.info("checkAccessTokenAndAuthentication() 호출");
         jwtProvider.extractAccessToken(request)
             .filter(jwtProvider::isTokenValid)
@@ -128,6 +118,18 @@ public class JwtServiceImpl implements JwtService {
         AuthUser context = AuthUser.builder().id(String.valueOf(user.getId())).build();
         Authentication authentication = new UsernamePasswordAuthenticationToken(context, null, context.getAuthorities());
         SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    @Override
+    public void deleteRefreshToken(HttpServletRequest httpServletRequest) {
+        String refreshToken = extractCookieValue(httpServletRequest, REFRESH_TOKEN);
+        String deviceId = extractCookieValue(httpServletRequest, DEVICE_ID);
+        if (refreshToken == null || deviceId == null) {
+            return;
+        }
+
+        jwtProvider.extractIdFromRefreshToken(refreshToken)
+            .ifPresent(userId -> jwtDao.deleteRefreshToken(userId, deviceId));
     }
 
     private String extractCookieValue(HttpServletRequest request, String name) {
