@@ -1,12 +1,15 @@
 package com.sosim.server.event;
 
 import com.sosim.server.config.exception.CustomException;
+import com.sosim.server.event.dto.info.DayInfo;
 import com.sosim.server.event.dto.info.EventInfo;
+import com.sosim.server.event.dto.info.EventListInfo;
 import com.sosim.server.event.dto.info.EventSingleInfo;
-import com.sosim.server.event.dto.info.MonthInfo;
+import com.sosim.server.event.dto.info.ListInfo;
 import com.sosim.server.event.dto.req.EventCreateReq;
-import com.sosim.server.event.dto.req.EventListReq;
+import com.sosim.server.event.dto.req.EventFilterRequest;
 import com.sosim.server.event.dto.req.EventModifyReq;
+import com.sosim.server.event.dto.req.MonthlyDayPaymentTypeReq;
 import com.sosim.server.event.dto.req.PaymentTypeReq;
 import com.sosim.server.group.Group;
 import com.sosim.server.group.GroupRepository;
@@ -19,117 +22,113 @@ import com.sosim.server.type.PaymentType;
 import com.sosim.server.type.StatusType;
 import com.sosim.server.user.User;
 import com.sosim.server.user.UserRepository;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.time.LocalTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import javax.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Sort.Direction;
 import org.springframework.stereotype.Service;
-import org.springframework.util.ObjectUtils;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 @Transactional
-public class EventServiceImpl implements EventService{
+public class EventServiceImpl implements EventService {
 
     private final EventRepository eventRepository;
     private final ParticipantRepository participantRepository;
-
     private final GroupRepository groupRepository;
-
     private final UserRepository userRepository;
 
     @Override
     public EventSingleInfo getEvent(long id) {
-
-        Event event = eventRepository.findByIdAndStatusType(id, StatusType.USING)
-            .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_EVENT));
-        Participant participant = participantRepository.findByUser(event.getUser())
-            .orElseThrow(() -> new CustomException(CodeType.INVALID_USER));
-
+        Event event = getActiveEvent(id);
         EventSingleInfo eventSingleInfo = EventSingleInfo.from(event);
 
-        if (event.getGroup().getAdminId().equals(event.getUser().getId())) {
-            eventSingleInfo.setAdminYn("true");
-        } else {
-            eventSingleInfo.setAdminYn("false");
-        }
-        eventSingleInfo.setUserName(participant.getNickname());
+        resolveNickname(event).ifPresentOrElse(
+            eventSingleInfo::setUserName,
+            () -> eventSingleInfo.setUserName("")
+        );
+
+        boolean isAdmin = event.getGroup().getAdminId().equals(event.getUser().getId());
+        eventSingleInfo.setAdminYn(isAdmin ? "true" : "false");
+
         return eventSingleInfo;
     }
 
     @Override
     public Long createEvent(AuthUser authUser, EventCreateReq eventCreateReq) {
+        Group group = groupRepository.findByIdAndStatusType(eventCreateReq.getGroupId(), StatusType.ACTIVE)
+            .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_GROUP));
 
-        Optional<Participant> byNickName = participantRepository.findByNickname(eventCreateReq.getUserName());
-        Participant participant = byNickName.orElseThrow(() -> new CustomException(CodeType.INVALID_USER));
-        Long userId = participant.getUser().getId();
-        Long groupId = participant.getGroup().getId();
+        Participant participant = participantRepository
+            .findByNicknameAndGroupAndStatusType(eventCreateReq.getUserName(), group, StatusType.ACTIVE)
+            .orElseThrow(() -> new CustomException(CodeType.INVALID_USER));
 
         if (!participant.getGroup().getAdminId().equals(Long.parseLong(authUser.getId()))) {
             throw new CustomException(CodeType.INVALID_EVENT_CREATER);
         }
 
-        LocalDateTime groundsDate = eventCreateReq.getGroundsDate();
-        Long payment = eventCreateReq.getPayment();
-        String grounds = eventCreateReq.getGrounds();
-        PaymentType paymentType = PaymentType.getType(eventCreateReq.getPaymentType());
-        Group group = groupRepository.findById(groupId).orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_GROUP));
-        User user = userRepository.findById(userId).orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_USER));
-        StatusType statusType = StatusType.USING;
-        EventType eventType = EventType.DUES_PAYMENT;
+        LocalDate localDate = LocalDate.parse(eventCreateReq.getGroundsDate(),
+            DateTimeFormatter.ofPattern("yyyy.MM.dd"));
+        User user = userRepository.findById(participant.getUser().getId())
+            .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_USER));
 
-        Event event = Event.builder().groundsDate(groundsDate).payment(payment).grounds(grounds).paymentType(paymentType)
-            .group(group).user(user).statusType(statusType).eventType(eventType).build();
+        Event event = Event.builder()
+            .groundsDate(LocalDateTime.of(localDate, LocalTime.MIDNIGHT))
+            .payment(eventCreateReq.getPayment())
+            .grounds(eventCreateReq.getGrounds())
+            .paymentType(PaymentType.getType(eventCreateReq.getPaymentType()))
+            .group(group)
+            .user(user)
+            .statusType(StatusType.ACTIVE)
+            .eventType(EventType.DUES_PAYMENT)
+            .build();
+
         eventRepository.save(event);
-
         return event.getId();
     }
 
-
     @Override
     public EventInfo updateEvent(AuthUser authUser, long id, EventModifyReq eventModifyReq) {
-
-        if (eventModifyReq.getUserName() == null && eventModifyReq.getGroundsDate() == null && ObjectUtils.isEmpty(eventModifyReq.getPayment())
-            && eventModifyReq.getGrounds() == null && eventModifyReq.getPaymentType() == null) {
-            throw new CustomException(CodeType.INPUT_ANY_DATA);
-        }
-
         Event event = getActiveEvent(id);
 
         if (!event.getGroup().getAdminId().equals(Long.parseLong(authUser.getId()))) {
             throw new CustomException(CodeType.INVALID_EVENT_CREATER);
         }
 
-        Participant participant = participantRepository.findByUser(event.getUser())
+        Participant participant = participantRepository
+            .findByNicknameAndGroup(eventModifyReq.getUserName(), event.getGroup())
             .orElseThrow(() -> new CustomException(CodeType.INVALID_USER));
 
-        if (eventModifyReq.getUserName() != null) {
-            Participant participantforName = participantRepository.findByNickname(eventModifyReq.getUserName())
-                .orElseThrow(() -> new CustomException(CodeType.INVALID_USER));
-            User user = userRepository.findById(participantforName.getUser().getId())
-                .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_USER));
-            eventModifyReq.setUser(user);
-        }
+        User user = userRepository.findById(participant.getUser().getId())
+            .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_USER));
+        eventModifyReq.setUser(user);
 
         event.updateEvent(eventModifyReq);
         eventRepository.save(event);
 
         EventInfo eventInfo = EventInfo.from(event);
         eventInfo.setUserName(participant.getNickname());
-
         return eventInfo;
     }
 
     @Override
     public void deleteEvent(AuthUser authUser, long id) {
-
         Event event = getActiveEvent(id);
 
         if (!event.getGroup().getAdminId().equals(Long.parseLong(authUser.getId()))) {
@@ -141,105 +140,119 @@ public class EventServiceImpl implements EventService{
 
     @Override
     public EventInfo changePaymentType(AuthUser authUser, long id, PaymentTypeReq paymentTypeReq) {
-
         Event event = getActiveEvent(id);
 
         if (!event.getGroup().getAdminId().equals(Long.parseLong(authUser.getId()))) {
-            throw new CustomException(CodeType.INVALID_EVENT_CREATER);
+            if (event.getUser().getId().equals(Long.parseLong(authUser.getId()))) {
+                if (!event.getPaymentType().equals(PaymentType.NON_PAYMENT) ||
+                    !paymentTypeReq.getPaymentType().equals("con")) {
+                    throw new CustomException(CodeType.PAYMENT_TYPE_MUST_BE_NON);
+                }
+                event.setUserNonToCon(event.getUserNonToCon() + 1);
+            } else {
+                throw new CustomException(CodeType.INVALID_PAYMENT_TYPE_CHANGER);
+            }
         }
 
-        Participant participant = participantRepository.findByUser(event.getUser())
-            .orElseThrow(() -> new CustomException(CodeType.INVALID_USER));
+        if (paymentTypeReq.getPaymentType().equals("full")) {
+            if (event.getPaymentType().equals(PaymentType.NON_PAYMENT)) {
+                event.setAdminNonToFull(event.getAdminNonToFull() + 1);
+            } else if (event.getPaymentType().equals(PaymentType.CONFIRMING)) {
+                event.setAdminConToFull(event.getAdminConToFull() + 1);
+            } else {
+                throw new CustomException(CodeType.INVALID_PAYMENT_TYPE_PARAMETER);
+            }
+        }
 
         event.changePaymentType(paymentTypeReq);
         eventRepository.save(event);
 
         EventInfo eventInfo = EventInfo.from(event);
-        eventInfo.setUserName(participant.getNickname());
-
+        resolveNickname(event).ifPresentOrElse(
+            eventInfo::setUserName,
+            () -> eventInfo.setUserName("")
+        );
         return eventInfo;
     }
 
     @Override
-    public List<EventInfo> getEventList(long groupId, EventListReq eventListReq) {
-        return null;
+    public ListInfo<EventListInfo> getEventList(long groupId, EventFilterRequest request) {
+        if (request.getPage() == null) {
+            throw new CustomException(CodeType.INPUT_PAGE_DATA);
+        }
+        Group group = groupRepository.findById(groupId)
+            .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_GROUP));
+
+        Page<Event> page = eventRepository.searchAll(groupId, request,
+            PageRequest.of(request.getPage(), 16, Sort.by(Direction.ASC, "groundsDate")));
+
+        return ListInfo.from(page.getTotalElements(), resolveEventInfoList(page.getContent(), group));
     }
 
     @Override
-    public List<MonthInfo> getMonthInfo(long groupId, int month) {
-        List<MonthInfo> monthList = new ArrayList<>();
-        // 필요한 데이터 : day가 몇일인지, 그리고 몇개인지
-        // 1, 3
-        // 2, 6
+    public List<DayInfo> getMonthlyDayPaymentType(long groupId, MonthlyDayPaymentTypeReq mdpTreq) {
+        Group group = groupRepository.findById(groupId)
+            .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_GROUP));
 
-//        findByPaymentTypeAndStatusTypeAndCreateDateBetween();
-//        List<Event> byPaymentTypeAndStatusType = eventRepository.findByPaymentTypeAndStatusType(
-//            PaymentType.NON_PAYMENT, StatusType.USING);
-//
-//        List<Event> monthNonpaymentList = byPaymentTypeAndStatusType.stream()
-//            .filter(event -> event.getCreateDate().getMonthValue() == month).collect(
-//                Collectors.toList());
+        YearMonth ym = YearMonth.of(mdpTreq.getYear(), mdpTreq.getMonth());
+        LocalDateTime start = ym.atDay(1).atStartOfDay();
+        LocalDateTime end = ym.atEndOfMonth().atTime(LocalTime.MAX);
 
+        List<Event> eventList = eventRepository.findByGroupAndStatusTypeAndGroundsDateBetween(
+            group, StatusType.ACTIVE, start, end);
 
-//        List<Map<Integer, Integer>> nonPaymentDayCountList = getPaymentList(PaymentType.NON_PAYMENT, month);
-//        List<Map<Integer, Integer>> conPaymentDayCountList = getPaymentList(PaymentType.CONFIRMING, month);
-//        List<Map<Integer, Integer>> fullPaymentDayCountList = getPaymentList(PaymentType.FULL_PAYMENT, month);
+        return eventList.stream()
+            .map(x -> {
+                int dayOfMonth = x.getGroundsDate().getDayOfMonth();
+                Map<String, Integer> countMap = new HashMap<>();
+                countMap.put("non", countByDay(eventList, dayOfMonth, PaymentType.NON_PAYMENT));
+                countMap.put("con", countByDay(eventList, dayOfMonth, PaymentType.CONFIRMING));
+                countMap.put("full", countByDay(eventList, dayOfMonth, PaymentType.FULL_PAYMENT));
+                return DayInfo.builder().day(dayOfMonth).paymentTypeCountMap(countMap).build();
+            })
+            .filter(distinctByKey(DayInfo::getDay))
+            .sorted(Comparator.comparingInt(DayInfo::getDay))
+            .collect(Collectors.toList());
+    }
 
-//        List<Map<Integer, Integer>> nonPaymentDayCountList1 = monthNonpaymentList.stream().map(event -> {
-//            Map<Integer, Integer> dayCount = new HashMap<>();
-//            int dayOfMonth = event.getCreateDate().getDayOfMonth();
-//            int count = (int) monthNonpaymentList.stream().filter(y -> y.getCreateDate().getDayOfMonth() == dayOfMonth)
-//                .count();
-//            dayCount.put(dayOfMonth, count);
-//            log.info("dayCount : {}", dayCount);
-//            return dayCount;
-//        }).collect(Collectors.toList());
+    private List<EventListInfo> resolveEventInfoList(List<Event> events, Group group) {
+        Map<Long, String> nicknameByUserId = participantRepository
+            .findListByGroupAndStatusType(group, StatusType.ACTIVE)
+            .stream()
+            .collect(Collectors.toMap(
+                p -> p.getUser().getId(),
+                Participant::getNickname,
+                (existing, replacement) -> existing
+            ));
 
-//        MonthInfo nonMonthInfo = MonthInfo.builder().paymentType(PaymentType.NON_PAYMENT.getParam()).dayCountList(nonPaymentDayCountList).build();
-//        MonthInfo conMonthInfo = MonthInfo.builder().paymentType(PaymentType.CONFIRMING.getParam()).dayCountList(conPaymentDayCountList).build();
-//        MonthInfo fullMonthInfo = MonthInfo.builder().paymentType(PaymentType.FULL_PAYMENT.getParam()).dayCountList(fullPaymentDayCountList).build();
-//        monthList.add(nonMonthInfo);
-//        monthList.add(conMonthInfo);
-//        monthList.add(fullMonthInfo);
-//        monthList.add(getMonthInfo(PaymentType.NON_PAYMENT, nonPaymentDayCountList));
-//        monthList.add(getMonthInfo(PaymentType.CONFIRMING, conPaymentDayCountList));
-//        monthList.add(getMonthInfo(PaymentType.FULL_PAYMENT, fullPaymentDayCountList));
+        return events.stream()
+            .map(event -> {
+                EventListInfo info = EventListInfo.from(event);
+                info.setUserName(nicknameByUserId.getOrDefault(event.getUser().getId(), ""));
+                return info;
+            })
+            .collect(Collectors.toList());
+    }
 
-        List<PaymentType> paymentTypeList = List.of(PaymentType.values());
-        monthList = paymentTypeList.stream().map(paymentType -> getMonthInfo(paymentType, getPaymentList(groupId, paymentType, month))).collect(Collectors.toList());
-        return monthList;
+    private java.util.Optional<String> resolveNickname(Event event) {
+        return participantRepository
+            .findByUserAndGroupAndStatusType(event.getUser(), event.getGroup(), StatusType.ACTIVE)
+            .map(Participant::getNickname);
+    }
+
+    private int countByDay(List<Event> events, int day, PaymentType type) {
+        return (int) events.stream()
+            .filter(e -> e.getPaymentType().equals(type) && e.getGroundsDate().getDayOfMonth() == day)
+            .count();
+    }
+
+    private static <T> Predicate<T> distinctByKey(Function<? super T, Object> keyExtractor) {
+        Map<Object, Boolean> map = new HashMap<>();
+        return t -> map.putIfAbsent(keyExtractor.apply(t), Boolean.TRUE) == null;
     }
 
     private Event getActiveEvent(long id) {
-        return eventRepository.findByIdAndStatusType(id, StatusType.USING)
+        return eventRepository.findByIdAndStatusType(id, StatusType.ACTIVE)
             .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_EVENT));
     }
-
-    private MonthInfo getMonthInfo(PaymentType paymentType, List<Map<Integer, Integer>> dayCountList) {
-        return MonthInfo.builder().paymentType(paymentType.getParam()).dayCountList(dayCountList).build();
-    }
-
-    private List<Map<Integer, Integer>> getPaymentList(long groupId, PaymentType paymentType, int month) {
-
-        Group group = groupRepository.findById(groupId).orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_GROUP));
-
-        List<Event> byPaymentTypeAndStatusType = eventRepository.findByPaymentTypeAndStatusTypeAndGroup(
-            paymentType, StatusType.USING, group);
-
-        List<Event> paymentList = byPaymentTypeAndStatusType.stream()
-            .filter(event -> event.getCreateDate().getMonthValue() == month).collect(
-                Collectors.toList());
-
-        List<Map<Integer, Integer>> paymentDayCountList = paymentList.stream().map(event -> {
-            Map<Integer, Integer> dayCount = new HashMap<>();
-            int dayOfMonth = event.getCreateDate().getDayOfMonth();
-            int count = (int) paymentList.stream().filter(y -> y.getCreateDate().getDayOfMonth() == dayOfMonth)
-                .count();
-            dayCount.put(dayOfMonth, count);
-            log.info("dayCount : {}", dayCount);
-            return dayCount;
-        }).collect(Collectors.toList());
-        return paymentDayCountList;
-    }
-
 }
