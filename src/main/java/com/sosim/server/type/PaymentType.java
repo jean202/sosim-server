@@ -22,13 +22,23 @@ public enum PaymentType {
     private static final Map<Object, PaymentType> map = EnumUtils.getMap(PaymentType.class);
 
     public static final PaymentType getType(String value) {
+        if (value == null) {
+            return map.get(NON_PAYMENT.name());
+        }
         switch (value) {
-            case "non": default:
+            case "non":
+            case "미납":
                 return map.get(NON_PAYMENT.name());
             case "con":
+            case "확인중":
+            case "확인필요":
+            case "확인중/확인필요":
                 return map.get(CONFIRMING.name());
             case "full":
+            case "완납":
                 return map.get(FULL_PAYMENT.name());
+            default:
+                return map.get(NON_PAYMENT.name());
         }
     }
 }
