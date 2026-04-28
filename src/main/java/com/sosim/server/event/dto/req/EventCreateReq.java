@@ -1,8 +1,6 @@
 package com.sosim.server.event.dto.req;
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.sosim.server.common.converter.StringToLocalDateTimeConverter;
-import java.time.LocalDateTime;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
@@ -11,25 +9,26 @@ import lombok.Getter;
 @Getter
 public class EventCreateReq {
 
-    // 팀원
+    @NotNull
+    private long groupId;
+
     @NotEmpty
+    @JsonAlias("nickname")
     private String userName;
 
-    // 사유 발생 날짜
-    @JsonDeserialize(converter = StringToLocalDateTimeConverter.class)
-    @NotNull
-    private LocalDateTime groundsDate;
+    @NotEmpty
+    @JsonAlias("date")
+    private String groundsDate;
 
-    // 금액
     @NotNull
+    @JsonAlias("amount")
     private Long payment;
 
-    // 사유
-    @NotEmpty
-    @Size(max=65)
+    @Size(max = 65)
+    @JsonAlias("ground")
     private String grounds;
 
-    //  납부여부
     @NotNull
+    @JsonAlias("situation")
     private String paymentType;
 }

@@ -8,7 +8,10 @@ import com.sosim.server.type.EventType;
 import com.sosim.server.type.PaymentType;
 import com.sosim.server.type.StatusType;
 import com.sosim.server.user.User;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.EnumType;
@@ -20,14 +23,15 @@ import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 import javax.persistence.Table;
-import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.springframework.util.ObjectUtils;
+import lombok.Setter;
+import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.DynamicInsert;
 
 @Getter
 @NoArgsConstructor
@@ -35,6 +39,7 @@ import org.springframework.util.ObjectUtils;
 @Builder
 @Table(name = "EVENT")
 @AllArgsConstructor
+@DynamicInsert
 public class Event extends BaseTimeEntity {
 
     @Id
@@ -54,15 +59,11 @@ public class Event extends BaseTimeEntity {
     @Column(name = "GROUNDS_DATE")
     private LocalDateTime groundsDate;
 
-    @Column(name = "DELETE_DATE")
-    private LocalDateTime deleteDate;
-
     @NotNull
     @Column(name = "PAYMENT")
     private Long payment;
 
-    @NotEmpty
-    @Size(max=65)
+    @Size(max = 65)
     @Column(name = "GROUNDS")
     private String grounds;
 
@@ -81,30 +82,42 @@ public class Event extends BaseTimeEntity {
     @Column(name = "EVENT_TYPE")
     private EventType eventType;
 
+    @Setter
+    @ColumnDefault("0")
+    @Column(name = "ADMIN_NON_TO_FULL")
+    private Integer adminNonToFull;
+
+    @Setter
+    @ColumnDefault("0")
+    @Column(name = "ADMIN_CON_TO_FULL")
+    private Integer adminConToFull;
+
+    @Setter
+    @ColumnDefault("0")
+    @Column(name = "USER_NON_TO_CON")
+    private Integer userNonToCon;
+
     public void updateEvent(EventModifyReq eventModifyReq) {
+        this.user = eventModifyReq.getUser();
 
-        if (eventModifyReq.getUserName() != null && eventModifyReq.getUser() != null) {
-            this.user = eventModifyReq.getUser();
-        }
+        DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy.MM.dd");
+        LocalDate localDate = LocalDate.parse(eventModifyReq.getGroundsDate(), dateTimeFormatter);
+        LocalDateTime groundsDatetime = LocalDateTime.of(localDate, LocalTime.of(0, 0, 0));
+        this.groundsDate = groundsDatetime;
+        this.payment = eventModifyReq.getPayment();
+        this.grounds = eventModifyReq.getGrounds();
 
-        if (eventModifyReq.getGroundsDate() != null) {
-            this.groundsDate = eventModifyReq.getGroundsDate();
+        if (eventModifyReq.getPaymentType().equals("full")) {
+            if (this.paymentType.equals(PaymentType.NON_PAYMENT)) {
+                this.adminNonToFull++;
+            } else if (this.paymentType.equals(PaymentType.CONFIRMING)) {
+                this.adminConToFull++;
+            }
         }
-
-        if (!ObjectUtils.isEmpty(eventModifyReq.getPayment())) {
-            this.payment = eventModifyReq.getPayment();
-        }
-
-        if (eventModifyReq.getGrounds() != null) {
-            this.grounds = eventModifyReq.getGrounds();
-        }
-
-        if (eventModifyReq.getPaymentType() != null) {
-            this.paymentType = PaymentType.getType(eventModifyReq.getPaymentType());
-        }
+        this.paymentType = PaymentType.getType(eventModifyReq.getPaymentType());
     }
 
-    public void deleteEvent(){
+    public void deleteEvent() {
         this.statusType = StatusType.DELETED;
     }
 
