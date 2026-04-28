@@ -68,7 +68,7 @@ public class EventCompatController {
         }
 
         Map<Long, Event> eventById = eventRepository.findAllById(eventIdList).stream()
-            .filter(event -> event.getStatusType() == StatusType.ACTIVE)
+            .filter(event -> event.getStatusType() == StatusType.USING)
             .filter(event -> groupId == null || event.getGroup().getId().equals(groupId))
             .collect(Collectors.toMap(Event::getId, Function.identity()));
 
@@ -90,18 +90,11 @@ public class EventCompatController {
 
     private String resolveNickname(Event event) {
         Participant activeParticipant = participantRepository
-            .findByUserAndGroupAndStatusType(event.getUser(), event.getGroup(), StatusType.ACTIVE)
+            .findByUserAndGroupAndStatus(event.getUser(), event.getGroup(), StatusType.USING)
             .orElse(null);
         if (activeParticipant != null) {
             return activeParticipant.getNickname();
         }
-
-        return participantRepository.findListByUserAndGroupAndStatusType(event.getUser(), event.getGroup(), StatusType.DELETED)
-            .stream()
-            .filter(participant -> participant.getCreateDate().isBefore(event.getCreateDate()))
-            .filter(participant -> participant.getDeleteDate() != null && participant.getDeleteDate().isAfter(event.getCreateDate()))
-            .max(Comparator.comparing(Participant::getCreateDate))
-            .map(Participant::getNickname)
-            .orElse("");
+        return "";
     }
 }

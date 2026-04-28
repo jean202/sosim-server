@@ -44,7 +44,7 @@ public class EventRepositoryImpl implements EventRepositoryDsl {
     private BooleanBuilder buildWhere(long groupId, EventFilterRequest request) {
         return new BooleanBuilder()
             .and(event.group.id.eq(groupId))
-            .and(event.statusType.eq(StatusType.ACTIVE))
+            .and(event.statusType.eq(StatusType.USING))
             .and(betweenTime(request.toDateRange()))
             .and(equalsUser(request.getNickname(), groupId))
             .and(equalsPaymentType(request.toPaymentType()));
@@ -61,7 +61,8 @@ public class EventRepositoryImpl implements EventRepositoryDsl {
                 .from(participant)
                 .where(
                     participant.nickname.eq(nickname),
-                    participant.group.id.eq(groupId)
+                    participant.group.id.eq(groupId),
+                    participant.status.eq(StatusType.USING)
                 )
         );
     }

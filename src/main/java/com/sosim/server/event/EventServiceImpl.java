@@ -72,11 +72,11 @@ public class EventServiceImpl implements EventService {
 
     @Override
     public Long createEvent(AuthUser authUser, EventCreateReq eventCreateReq) {
-        Group group = groupRepository.findByIdAndStatusType(eventCreateReq.getGroupId(), StatusType.ACTIVE)
+        Group group = groupRepository.findByIdAndStatus(eventCreateReq.getGroupId(), StatusType.USING)
             .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_GROUP));
 
         Participant participant = participantRepository
-            .findByNicknameAndGroupAndStatusType(eventCreateReq.getUserName(), group, StatusType.ACTIVE)
+            .findByNicknameAndGroupAndStatus(eventCreateReq.getUserName(), group, StatusType.USING)
             .orElseThrow(() -> new CustomException(CodeType.INVALID_USER));
 
         if (!participant.getGroup().getAdminId().equals(Long.parseLong(authUser.getId()))) {
@@ -95,7 +95,7 @@ public class EventServiceImpl implements EventService {
             .paymentType(PaymentType.getType(eventCreateReq.getPaymentType()))
             .group(group)
             .user(user)
-            .statusType(StatusType.ACTIVE)
+            .statusType(StatusType.USING)
             .eventType(EventType.DUES_PAYMENT)
             .build();
 
@@ -112,7 +112,7 @@ public class EventServiceImpl implements EventService {
         }
 
         Participant participant = participantRepository
-            .findByNicknameAndGroup(eventModifyReq.getUserName(), event.getGroup())
+            .findByNicknameAndGroupAndStatus(eventModifyReq.getUserName(), event.getGroup(), StatusType.USING)
             .orElseThrow(() -> new CustomException(CodeType.INVALID_USER));
 
         User user = userRepository.findById(participant.getUser().getId())
@@ -199,7 +199,7 @@ public class EventServiceImpl implements EventService {
         LocalDateTime end = ym.atEndOfMonth().atTime(LocalTime.MAX);
 
         List<Event> eventList = eventRepository.findByGroupAndStatusTypeAndGroundsDateBetween(
-            group, StatusType.ACTIVE, start, end);
+            group, StatusType.USING, start, end);
 
         return eventList.stream()
             .map(x -> {
@@ -216,19 +216,10 @@ public class EventServiceImpl implements EventService {
     }
 
     private List<EventListInfo> resolveEventInfoList(List<Event> events, Group group) {
-        Map<Long, String> nicknameByUserId = participantRepository
-            .findListByGroupAndStatusType(group, StatusType.ACTIVE)
-            .stream()
-            .collect(Collectors.toMap(
-                p -> p.getUser().getId(),
-                Participant::getNickname,
-                (existing, replacement) -> existing
-            ));
-
         return events.stream()
             .map(event -> {
                 EventListInfo info = EventListInfo.from(event);
-                info.setUserName(nicknameByUserId.getOrDefault(event.getUser().getId(), ""));
+                info.setUserName(resolveNickname(event).orElse(""));
                 return info;
             })
             .collect(Collectors.toList());
@@ -236,7 +227,7 @@ public class EventServiceImpl implements EventService {
 
     private java.util.Optional<String> resolveNickname(Event event) {
         return participantRepository
-            .findByUserAndGroupAndStatusType(event.getUser(), event.getGroup(), StatusType.ACTIVE)
+            .findByUserAndGroupAndStatus(event.getUser(), event.getGroup(), StatusType.USING)
             .map(Participant::getNickname);
     }
 
@@ -252,7 +243,7 @@ public class EventServiceImpl implements EventService {
     }
 
     private Event getActiveEvent(long id) {
-        return eventRepository.findByIdAndStatusType(id, StatusType.ACTIVE)
+        return eventRepository.findByIdAndStatusType(id, StatusType.USING)
             .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_EVENT));
     }
 }

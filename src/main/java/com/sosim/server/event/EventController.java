@@ -119,7 +119,7 @@ public class EventController {
     public ResponseEntity<?> getCalendarStatus(@RequestParam("groupId") long groupId,
                                                @RequestParam("startDate") String startDate,
                                                @RequestParam("endDate") String endDate) {
-        Group group = groupRepository.findByIdAndStatusType(groupId, StatusType.ACTIVE)
+        Group group = groupRepository.findByIdAndStatus(groupId, StatusType.USING)
             .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_GROUP));
 
         EventFilterRequest request = EventFilterRequest.builder()
@@ -130,7 +130,7 @@ public class EventController {
 
         Map<Integer, Map<String, Integer>> statusOfDay = new HashMap<>();
         for (Event event : eventRepository.findByGroupAndStatusTypeAndGroundsDateBetween(
-            group, StatusType.ACTIVE, request.toDateRange().getStart(), request.toDateRange().getEnd())) {
+            group, StatusType.USING, request.toDateRange().getStart(), request.toDateRange().getEnd())) {
             int day = event.getGroundsDate().getDayOfMonth();
             Map<String, Integer> counts = statusOfDay.computeIfAbsent(day, ignored -> createEmptyStatusMap());
             String situation = ClientEventInfo.toSituation(event.getPaymentType());
@@ -144,27 +144,17 @@ public class EventController {
     }
 
     private Event getActiveEvent(long id) {
-        return eventRepository.findByIdAndStatusType(id, StatusType.ACTIVE)
+        return eventRepository.findByIdAndStatusType(id, StatusType.USING)
             .orElseThrow(() -> new CustomException(CodeType.NOT_FOUND_EVENT));
     }
 
     private String resolveNickname(Event event) {
         Participant activeParticipant = participantRepository
-            .findByUserAndGroupAndStatusType(event.getUser(), event.getGroup(), StatusType.ACTIVE)
+            .findByUserAndGroupAndStatus(event.getUser(), event.getGroup(), StatusType.USING)
             .orElse(null);
         if (activeParticipant != null) {
             return activeParticipant.getNickname();
         }
-
-        for (Participant participant : participantRepository.findListByUserAndGroupAndStatusType(
-            event.getUser(), event.getGroup(), StatusType.DELETED)) {
-            if (participant.getCreateDate().isBefore(event.getCreateDate())
-                && participant.getDeleteDate() != null
-                && participant.getDeleteDate().isAfter(event.getCreateDate())) {
-                return participant.getNickname();
-            }
-        }
-
         return "";
     }
 
