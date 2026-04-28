@@ -71,6 +71,20 @@ public class JwtServiceImpl implements JwtService{
         response.addHeader(SET_COOKIE, cookie.toString());
     }
 
+    @Override
+    public void deleteRefreshToken(HttpServletRequest httpServletRequest) {
+        Cookie[] cookies = httpServletRequest.getCookies();
+        if (cookies == null) return;
+        String refreshToken = null;
+        for (Cookie cookie : cookies) {
+            if (cookie.getName().equals(REFRESH_TOKEN)) refreshToken = cookie.getValue();
+        }
+
+        if (refreshToken != null) {
+            jwtDao.deleteValues(refreshToken);
+        }
+    }
+
     public String reIssueRefreshToken(String id) {
         String reIssuedRefreshToken = jwtFactory.createRefreshToken();
         jwtDao.setValues(reIssuedRefreshToken, id);

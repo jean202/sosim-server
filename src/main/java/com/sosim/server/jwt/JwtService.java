@@ -10,4 +10,5 @@ public interface JwtService {
     void saveRefreshToken(RefreshToken refreshToken);
     ReIssueTokenInfo verifyRefreshTokenAndReIssueAccessToken(HttpServletRequest httpServletRequest, HttpServletResponse response);
     void setCookieRefreshToken(HttpServletResponse response, String refreshToken);
+    void deleteRefreshToken(HttpServletRequest httpServletRequest);
 }

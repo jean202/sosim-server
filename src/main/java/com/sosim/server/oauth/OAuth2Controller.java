@@ -15,7 +15,7 @@ import javax.servlet.http.HttpServletResponse;
 
 @RequiredArgsConstructor
 @RestController
-@RequestMapping("/login/{socialType}")
+@RequestMapping("/auth/{socialType}")
 public class OAuth2Controller {
 
     private final OAuth2Service oAuth2Service;

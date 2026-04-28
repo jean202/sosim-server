@@ -31,7 +31,9 @@ public class CustomException extends NestedRuntimeException {
     }
 
     public RestError toRestError() {
-        return new RestError(this.content.getField(), this.codeType.getCode(), this.content.getMessage(), this.codeType.getHttpStatus());
+        String field = this.content == null ? null : this.content.getField();
+        String message = this.content == null ? this.codeType.getMessage() : this.content.getMessage();
+        return new RestError(field, this.codeType.getCode(), message, this.codeType.getHttpStatus());
     }
 
     public ResponseEntity<RestError> toResponseEntity() {
@@ -42,7 +44,7 @@ public class CustomException extends NestedRuntimeException {
     @Getter
     public static class RestError {
         private String field;
-        private String code;
+        private int code;
         private String message;
         private HttpStatus status;
 
